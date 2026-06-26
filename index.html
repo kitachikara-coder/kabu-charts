@@ -21,7 +21,7 @@
  .badge{display:inline-block;min-width:26px;padding:1px 6px;border-radius:9px;color:#fff;font-weight:bold}
  .note{color:#6b7280;font-size:11px;padding:6px 8px}
 </style></head><body>
-<header>テーマ別監視銘柄 チャートダッシュボード　<span style="font-weight:normal;font-size:13px">更新: 2026-06-26 09:12　（行クリックでチャート表示／押し目スコア降順）</span></header>
+<header>テーマ別監視銘柄 チャートダッシュボード　<span style="font-weight:normal;font-size:13px">更新: 2026-06-26 09:26　（行クリックでチャート表示／押し目スコア降順）</span></header>
 <div id="wrap">
  <div id="side">
   <div class="filt">
@@ -90,10 +90,12 @@ function plot(code){
  let macd={x:t,y:d.macd,type:'scatter',mode:'lines',name:'MACD',line:{color:'#1f77b4'},yaxis:'y4'};
  let sig={x:t,y:d.sig,type:'scatter',mode:'lines',name:'Signal',line:{color:'#ff7f0e'},yaxis:'y4'};
  let hist={x:t,y:d.hist,type:'bar',name:'Hist',marker:{color:'#b0bec5'},yaxis:'y4'};
- let layout={title:`${code} ${m.name}　[${lbl}] [${m.trend}] スコア${m.score}<br>`+
+ let layout={title:{text:`${code} ${m.name}　[${lbl}] [${m.trend}] スコア${m.score}<br>`+
    `株価 ${m.price}円 / 前日終値 ${m.prev}円 / RSI ${m.rsi} / 25MA乖離 ${m.dev25}%`,
-  showlegend:true,legend:{orientation:'h',y:1.06},margin:{t:84,l:55,r:20,b:30},
-  titlefont:{size:14},
+   x:0.5,xanchor:'center',font:{size:14}},
+  showlegend:true,legend:{orientation:'h',x:0.5,xanchor:'center',y:-0.08,yanchor:'top',
+   font:{size:11}},
+  margin:{t:78,l:55,r:20,b:70},
   xaxis:{rangeslider:{visible:false},domain:[0,1],type:'category',nticks:10},
   yaxis:{domain:[0.46,1],title:'価格'},
   yaxis2:{domain:[0.32,0.45],title:'出来高'},
