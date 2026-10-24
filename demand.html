@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日本株 週次需給レポート</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<style>
+html,body{margin:0;background:#1A2030}
+#dash-root{--color-bad:#FF5A6E;--cds-dur-slow:.3s;--font-anthropic-sans:system-ui}
+.jr { --bg:#1A2030; --panel:#222A3B; --panel2:#2A3347; --line:#303B52; --line2:#3A4660;
+  --ink:#EAF0F8; --muted:#8C9AB2; --blue:#2D9CFF; --blue2:#1E6FD9; --red:#FF5A6E; --green:#34D399; --amber:#F5A623; --gray:#7C8BA3;
+  --red-bg:rgba(255,90,110,.14); --green-bg:rgba(52,211,153,.14); --blue-bg:rgba(45,156,255,.14);
+  container-type:inline-size; background:var(--bg); color:var(--ink);
+  font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Yu Gothic",Meiryo,var(--font-anthropic-sans),sans-serif;
+  font-size:11.5px; line-height:1.45; min-height:100%; padding:14px 16px 24px; }
+.jr *{box-sizing:border-box}
+.jr .wrap{max-width:1440px; margin-inline:auto}
+.jr .hd{display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:4px 18px; padding:2px 4px 12px; margin-bottom:12px; border-bottom:1px solid var(--line)}
+.jr .hd h1{margin:0; font-size:20px; font-weight:700; letter-spacing:.06em; white-space:nowrap}
+.jr .hd h1::before{content:""; display:inline-block; width:6px; height:18px; background:var(--blue); margin-right:10px; vertical-align:-2px; border-radius:2px}
+.jr .hd .wk{font-size:12px; color:var(--blue); font-weight:600; white-space:nowrap; background:var(--blue-bg); padding:3px 10px; border-radius:999px}
+.jr .hd .sum{justify-self:end; text-align:right; font-size:12px; color:var(--ink)}
+.jr .g{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:12px}
+.jr .c{background:var(--panel); border-radius:10px; display:flex; flex-direction:column; min-width:0; overflow:hidden}
+.jr .c > h2{margin:0; font-size:12.5px; font-weight:600; color:var(--ink); padding:10px 14px 0; display:flex; justify-content:space-between; align-items:baseline; gap:8px}
+.jr .c > h2 small{font-weight:400; font-size:10px; color:var(--muted)}
+.jr .cb{padding:8px 14px 10px; flex:1; display:flex; flex-direction:column; gap:6px; min-width:0}
+.jr .kpis{grid-column:span 9; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+.jr .ev{grid-column:span 3}
+.jr .b1{grid-column:span 5} .jr .b2{grid-column:span 3} .jr .b3{grid-column:span 4}
+.jr .b4{grid-column:span 6} .jr .b5{grid-column:span 2} .jr .b67{grid-column:span 4; display:flex; flex-direction:column; gap:12px}
+@container (max-width: 1100px){ .jr .kpis{grid-column:span 12; grid-template-columns:repeat(2,1fr)} .jr .ev,.jr .b1,.jr .b2,.jr .b3,.jr .b4,.jr .b5,.jr .b67{grid-column:span 6} }
+@container (max-width: 760px){ .jr .g > *{grid-column:span 12 !important} .jr .hd{grid-template-columns:1fr} .jr .hd .sum{justify-self:start; text-align:left} }
+/* KPI ring tiles */
+.jr .kpi{display:flex; align-items:center; gap:12px; padding:14px 16px}
+.jr .kpi svg{flex:0 0 auto}
+.jr .kpi .v{font-size:20px; font-weight:700; letter-spacing:.02em; font-variant-numeric:tabular-nums; line-height:1.1}
+.jr .kpi .l{font-size:10.5px; color:var(--muted); letter-spacing:.06em; margin-top:3px}
+.jr .kpi .s{font-size:10px; color:var(--muted); margin-top:2px}
+/* flow bars */
+.jr .flows{display:grid; grid-template-columns:auto minmax(80px,1fr) auto auto; gap:0 10px; align-items:center; font-size:10.5px; font-variant-numeric:tabular-nums}
+.jr .flows .hr{color:var(--muted); font-size:9.5px; letter-spacing:.05em; padding-bottom:4px; border-bottom:1px solid var(--line)}
+.jr .flows > div{padding:3px 0; border-bottom:1px solid var(--line); min-width:0}
+.jr .flows .nm{font-weight:600; white-space:nowrap}
+.jr .flows .nm.sub{font-weight:400; color:var(--muted); padding-left:12px}
+.jr .flows .bar svg{display:block; width:100%; height:16px}
+.jr .flows .cur{text-align:right; font-weight:700}
+.jr .flows .dif{text-align:right; min-width:58px}
+.jr .flows .dif span{display:inline-block; padding:0 6px; border-radius:999px; font-size:10px}
+.jr .flows .cm{grid-column:1 / -1; color:var(--muted); font-size:9.5px; padding:0 0 3px; margin-top:-3px; border-bottom:1px solid var(--line)}
+.jr .neg{color:var(--red)} .jr .pos{color:var(--green)}
+.jr .up{background:var(--green-bg); color:var(--green)} .jr .dn{background:var(--red-bg); color:var(--red)}
+.jr .src{margin:0; margin-top:auto; font-size:9px; color:var(--muted); padding-top:4px}
+.jr .badge{align-self:flex-start; font-size:10.5px; font-weight:600; color:var(--red); background:var(--red-bg); padding:2px 10px; border-radius:999px}
+/* charts */
+.jr .ch{position:relative; width:100%}
+.jr .ch svg{display:block; width:100%; height:auto}
+.jr .ch .tip{position:absolute; pointer-events:none; background:var(--panel2); border:1px solid var(--line2); border-radius:6px; padding:4px 8px; font-size:10px; white-space:nowrap; display:none; z-index:2}
+.jr .ch text{fill:var(--muted); font-size:9.5px}
+.jr .ch .lbl{fill:var(--ink); font-weight:600; font-size:10px}
+.jr .memo{font-size:10px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap}
+.jr .memo i{font-style:normal; display:inline-block; width:14px; border-top:1px dashed var(--amber); vertical-align:middle; margin-right:4px}
+.jr .memo i.r{border-color:var(--red)}
+/* mini tables */
+.jr table{width:100%; border-collapse:collapse; font-size:10px; font-variant-numeric:tabular-nums}
+.jr th{color:var(--muted); font-weight:500; padding:2px 5px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; font-size:9.5px}
+.jr th:first-child,.jr td:first-child{text-align:left}
+.jr td{padding:3px 5px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap}
+.jr td.k{font-weight:600}
+.jr tbody tr:last-child td{border-bottom:0}
+.jr tbody tr.hl td{color:var(--ink); background:rgba(45,156,255,.08)}
+/* big latest values */
+.jr .big{display:flex; gap:16px}
+.jr .big > div{flex:1}
+.jr .big .v{font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1}
+.jr .big .l{font-size:9.5px; color:var(--muted); letter-spacing:.05em}
+.jr .big .d{font-size:10px; margin-top:2px}
+/* indicators */
+.jr .ind{display:flex; flex-direction:column}
+.jr .ind > div{display:grid; grid-template-columns:62px 1fr auto; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--line)}
+.jr .ind > div:last-child{border-bottom:0}
+.jr .ind .n{font-size:10.5px; color:var(--muted)}
+.jr .ind .v{font-size:14px; font-weight:700; font-variant-numeric:tabular-nums}
+.jr .ind .v small{font-size:9.5px; color:var(--muted); font-weight:400; margin-left:6px}
+.jr .ind .d{font-size:10.5px; font-weight:600; padding:1px 8px; border-radius:999px; min-width:64px; text-align:center}
+/* points / outlook */
+.jr ol.pts{margin:0; padding:0; list-style:none; counter-reset:p; display:flex; flex-direction:column; gap:5px}
+.jr ol.pts li{counter-increment:p; position:relative; padding-left:24px; font-size:11px}
+.jr ol.pts li::before{content:counter(p); position:absolute; left:0; top:1px; width:17px; height:17px; border-radius:50%; background:var(--blue); color:#fff; font-size:10px; font-weight:700; text-align:center; line-height:17px}
+.jr ol.pts li b{color:var(--blue); font-weight:600}
+.jr .scn{display:flex; flex-direction:column; gap:4px}
+.jr .scn > div{display:grid; grid-template-columns:40px 1fr; gap:8px; align-items:start}
+.jr .scn .lb{font-size:10px; font-weight:600; text-align:center; padding:1px 0; border-radius:4px; background:var(--panel2)}
+.jr .scn .lb.u{color:var(--green)} .jr .scn .lb.d{color:var(--red)} .jr .scn .lb.m{color:var(--muted)}
+.jr .scn p{margin:0; font-size:10.5px; line-height:1.4}
+/* eval */
+.jr .ev{border:1px solid var(--st,var(--gray)); background:linear-gradient(180deg, color-mix(in srgb, var(--st,var(--gray)) 14%, var(--panel)), var(--panel))}
+.jr .ev .state{font-size:22px; font-weight:700; color:var(--st,var(--gray)); letter-spacing:.08em; padding:2px 0}
+.jr .steps{display:grid; grid-template-columns:repeat(4,1fr); gap:3px}
+.jr .steps span{font-size:8.5px; text-align:center; padding:2px 0; color:var(--muted); background:var(--panel2); border-radius:4px; white-space:nowrap; overflow:hidden}
+.jr .steps span.on{color:#fff; background:var(--sc); font-weight:700}
+.jr .ev .rs{margin:0; padding-left:14px; font-size:10.5px; line-height:1.45; color:var(--ink)}
+/* tabs */
+.jr .tabs{display:flex; align-items:flex-end; gap:4px; margin:-12px 0 12px; border-bottom:1px solid var(--line)}
+.jr .tab{appearance:none; background:none; border:0; border-bottom:2px solid transparent; color:var(--muted); font:inherit; font-size:12px; padding:6px 14px 7px; cursor:pointer; margin-bottom:-1px}
+.jr .tab.on{color:var(--ink); font-weight:700; border-bottom-color:var(--blue)}
+.jr .tabmeta{margin-left:auto; display:flex; gap:14px; font-size:10px; color:var(--muted); padding-bottom:7px}
+.jr .pane[hidden]{display:none}
+.jr .s1,.jr .s2{grid-column:span 6} .jr .s3{grid-column:span 9} .jr .s4{grid-column:span 3} .jr .s5{grid-column:span 12}
+@container (max-width: 1100px){ .jr .s3{grid-column:span 12} .jr .s4{grid-column:span 12} }
+.jr .tw{overflow-x:auto}
+.jr table.sec{font-size:10.5px}
+.jr table.sec td{padding:4px 6px} .jr table.sec th{padding:3px 6px}
+.jr .bd{display:inline-block; font-size:9.5px; font-weight:600; padding:1px 8px; border-radius:999px; white-space:nowrap}
+.jr .bd.red{color:var(--red); background:var(--red-bg)} .jr .bd.green{color:var(--green); background:var(--green-bg)} .jr .bd.gray{color:var(--muted); background:var(--panel2)}
+.jr .bdl{display:flex; flex-wrap:wrap; gap:4px; margin-top:auto; padding-top:6px; border-top:1px solid var(--line)}
+.jr .reads li{margin-bottom:4px}
+.jr .heat text{font-size:9px}
+.jr .heat .cv{font-size:8.5px; font-weight:600}
+.jr .heat .rl{fill:var(--ink); font-size:10px; font-weight:600}
+.jr .note{grid-column:span 12; margin:0; font-size:9.5px; color:var(--muted); line-height:1.5}
+/* spec */
+.jr .fail{display:flex; align-items:center; justify-content:center; gap:6px; color:var(--muted); font-size:10px; padding:8px 0}
+.jr .fail::before{content:""; width:.375rem; height:.375rem; border-radius:50%; background:var(--color-bad)}
+.jr [data-dash-source-state=refreshing]{opacity:.5; transition:opacity var(--cds-dur-slow)}
+.jr [data-dash-source-state=empty]{color:transparent}
+@media print{
+  @page{size:A4 landscape; margin:5mm}
+  .jr{ --bg:#fff; --panel:#fff; --panel2:#F0F3F7; --line:#C8D2DE; --line2:#B5C1D0; --ink:#111; --muted:#555;
+       --blue:#1F3A5F; --blue2:#1F3A5F; --red:#C62828; --green:#1E7B45; --amber:#B45309; --gray:#6B7A90;
+       --red-bg:#FBE9E9; --green-bg:#E6F4EA; --blue-bg:#E9EEF5;
+       padding:0; font-size:9.5px; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .jr .c{border:1px solid var(--line); border-radius:4px; background:#fff}
+  .jr .ev{background:#fff}
+  .jr .tab.on{color:#111}
+  .jr .steps span.on{color:#fff}
+  .jr ol.pts li::before{color:#fff}
+  .jr .spec{display:none}
+  .jr .tabs{display:none}
+  .jr .pane[hidden]{display:grid}
+  .jr #pane-sec{break-before:page; padding-top:8px}
+  .jr .c{break-inside:avoid}
+  html,body{background:#fff}
+  .jr .wrap{max-width:none}
+  .jr{zoom:.68}
+  .jr .g{gap:8px}
+  .jr .kpis{grid-column:span 9 !important; grid-template-columns:repeat(4,minmax(0,1fr)) !important}
+  .jr .ev{grid-column:span 3 !important} .jr .b1{grid-column:span 5 !important} .jr .b2{grid-column:span 3 !important} .jr .b3{grid-column:span 4 !important}
+  .jr .b4{grid-column:span 6 !important} .jr .b5{grid-column:span 2 !important} .jr .b67{grid-column:span 4 !important}
+  .jr .s1,.jr .s2{grid-column:span 6 !important} .jr .s3{grid-column:span 9 !important} .jr .s4{grid-column:span 3 !important} .jr .s5{grid-column:span 12 !important}
+  .jr .kpi{padding:8px 10px} .jr .kpi .v{font-size:15px}
+}
+</style>
+</head>
+<body>
+<div id="dash-root">
+<script id="demand-data" type="application/json">
+{"spot_flows": [{"order": 1, "investor": "海外投資家", "prev": 14318, "curr": -3654, "diff": -17972, "comment": "買い越しから売り越しに転換。"}, {"order": 2, "investor": "個人（計）", "prev": 881, "curr": 2193, "diff": 1312, "comment": "3週連続で買い越し（買い越し幅は拡大）。"}, {"order": 3, "investor": "個人 現金", "prev": -1798, "curr": 234, "diff": 2032, "comment": "売り越しから買い越しに転換。"}, {"order": 4, "investor": "個人 信用", "prev": 2679, "curr": 1958, "diff": -721, "comment": "3週連続で買い越し（買い越し幅は縮小）。"}, {"order": 5, "investor": "投資信託", "prev": -1556, "curr": 1379, "diff": 2935, "comment": "売り越しから買い越しに転換。"}, {"order": 6, "investor": "事業法人", "prev": 1780, "curr": 1850, "diff": 70, "comment": "2週連続で買い越し（買い越し幅は拡大）。"}, {"order": 7, "investor": "信託銀行", "prev": -360, "curr": -772, "diff": -412, "comment": "2週連続で売り越し（売り越し幅は拡大）。"}, {"order": 8, "investor": "証券自己", "prev": -12685, "curr": -103, "diff": 12582, "comment": "3週連続で売り越し（売り越し幅は縮小）。"}], "futures_flows": [{"order": 1, "investor": "海外投資家", "prev": -3292, "curr": -6273, "diff": -2981, "comment": "3週連続で売り越し（売り越し幅は拡大）。"}, {"order": 2, "investor": "個人", "prev": 998, "curr": 1479, "diff": 481, "comment": "2週連続で買い越し（買い越し幅は拡大）。"}, {"order": 3, "investor": "投資信託", "prev": -1320, "curr": 330, "diff": 1650, "comment": "売り越しから買い越しに転換。"}, {"order": 4, "investor": "事業法人", "prev": 240, "curr": 56, "diff": -184, "comment": "2週連続で買い越し（買い越し幅は縮小）。"}, {"order": 5, "investor": "信託銀行", "prev": -1671, "curr": 3259, "diff": 4930, "comment": "売り越しから買い越しに転換。"}, {"order": 6, "investor": "証券自己", "prev": 5213, "curr": 553, "diff": -4660, "comment": "3週連続で買い越し（買い越し幅は縮小）。"}], "arbitrage": [{"week_end": "2026-09-25", "buy": 33750, "buy_chg": null, "sell": 357, "sell_chg": null, "latest": false}, {"week_end": "2026-10-02", "buy": 24641, "buy_chg": -9109, "sell": 357, "sell_chg": 0, "latest": false}, {"week_end": "2026-10-09", "buy": 27094, "buy_chg": 2453, "sell": 394, "sell_chg": 37, "latest": false}, {"week_end": "2026-10-16", "buy": 27474, "buy_chg": 380, "sell": 576, "sell_chg": 182, "latest": true}], "margin": [{"week_end": "2026-09-25", "buy_shares": 3500946, "buy_amount": 64607.51, "buy_chg": null, "sell_shares": 545047, "sell_amount": 10471.4, "sell_chg": null, "ratio": 6.17, "pl_rate": -5.48, "latest": false, "buy_shares_chg_pct": 0.16}, {"week_end": "2026-10-02", "buy_shares": 3763054, "buy_amount": 65204.93, "buy_chg": 597.42, "sell_shares": 354374, "sell_amount": 7507.14, "sell_chg": -2964.26, "ratio": 8.69, "pl_rate": -5.58, "latest": false, "buy_shares_chg_pct": 7.49}, {"week_end": "2026-10-09", "buy_shares": 3827971, "buy_amount": 67048.78, "buy_chg": 1843.85, "sell_shares": 366896, "sell_amount": 7620.46, "sell_chg": 113.32, "ratio": 8.8, "pl_rate": -6.58, "latest": false, "buy_shares_chg_pct": 1.73}, {"week_end": "2026-10-16", "buy_shares": 3731900, "buy_amount": 66607.79, "buy_chg": -440.99, "sell_shares": 366259, "sell_amount": 6670.5, "sell_chg": -949.96, "ratio": 9.99, "pl_rate": -10.41, "latest": true, "buy_shares_chg_pct": -2.51}], "indicators": [{"order": 1, "name": "日経平均", "prev": 69030.92, "curr": 65324.29, "chg": -5.37, "decimals": 2, "chg_unit": "pct"}, {"order": 2, "name": "TOPIX", "prev": 4104.81, "curr": 4066.0, "chg": -0.95, "decimals": 2, "chg_unit": "pct"}, {"order": 3, "name": "ドル円", "prev": 158.06, "curr": 158.14, "chg": 0.05, "decimals": 2, "chg_unit": "pct"}, {"order": 4, "name": "SOX", "prev": 12572.4, "curr": 11137.3, "chg": -11.41, "decimals": 1, "chg_unit": "pct"}, {"order": 5, "name": "米10年債", "prev": 5.24, "curr": 5.1, "chg": -0.15, "decimals": 2, "chg_unit": "pt"}], "sectors": [{"code": "0050", "sector": "水産・農林業", "short": "水産", "chg_pct": 1.7, "turnover_chg": -9.4, "ratio": 12.0, "buy_chg": -0.1, "short_ratio": 38.4, "short_ratio_chg": 0.5, "judge": ""}, {"code": "1050", "sector": "鉱業", "short": "鉱業", "chg_pct": 0.6, "turnover_chg": 5.3, "ratio": 7.8, "buy_chg": -6.4, "short_ratio": 39.9, "short_ratio_chg": -4.2, "judge": ""}, {"code": "2050", "sector": "建設業", "short": "建設", "chg_pct": 0.2, "turnover_chg": -2.1, "ratio": 8.2, "buy_chg": -1.0, "short_ratio": 37.2, "short_ratio_chg": -0.2, "judge": ""}, {"code": "3050", "sector": "食料品", "short": "食料品", "chg_pct": 2.5, "turnover_chg": 0.3, "ratio": 6.6, "buy_chg": -3.6, "short_ratio": 39.6, "short_ratio_chg": -3.9, "judge": ""}, {"code": "3100", "sector": "繊維製品", "short": "繊維", "chg_pct": 1.4, "turnover_chg": 5.6, "ratio": 8.3, "buy_chg": -2.6, "short_ratio": 33.9, "short_ratio_chg": 1.2, "judge": ""}, {"code": "3150", "sector": "パルプ・紙", "short": "パルプ", "chg_pct": 2.6, "turnover_chg": 6.0, "ratio": 8.9, "buy_chg": -2.5, "short_ratio": 43.9, "short_ratio_chg": 3.4, "judge": ""}, {"code": "3200", "sector": "化学", "short": "化学", "chg_pct": -0.7, "turnover_chg": 1.2, "ratio": 10.7, "buy_chg": -4.1, "short_ratio": 40.8, "short_ratio_chg": 2.1, "judge": "売り仕掛け"}, {"code": "3250", "sector": "医薬品", "short": "医薬品", "chg_pct": 6.0, "turnover_chg": 18.3, "ratio": 12.7, "buy_chg": -3.7, "short_ratio": 36.6, "short_ratio_chg": -3.3, "judge": ""}, {"code": "3300", "sector": "石油・石炭製品", "short": "石油", "chg_pct": 1.9, "turnover_chg": -0.3, "ratio": 20.8, "buy_chg": 10.4, "short_ratio": 38.4, "short_ratio_chg": 1.3, "judge": ""}, {"code": "3350", "sector": "ゴム製品", "short": "ゴム", "chg_pct": 2.5, "turnover_chg": 9.4, "ratio": 4.4, "buy_chg": -6.8, "short_ratio": 47.1, "short_ratio_chg": 4.9, "judge": ""}, {"code": "3400", "sector": "ガラス・土石製品", "short": "ガラス", "chg_pct": -5.1, "turnover_chg": -7.3, "ratio": 7.2, "buy_chg": -1.4, "short_ratio": 41.9, "short_ratio_chg": -1.2, "judge": "整理進行"}, {"code": "3450", "sector": "鉄鋼", "short": "鉄鋼", "chg_pct": 1.9, "turnover_chg": 2.1, "ratio": 13.6, "buy_chg": -4.0, "short_ratio": 46.4, "short_ratio_chg": -1.7, "judge": ""}, {"code": "3500", "sector": "非鉄金属", "short": "非鉄", "chg_pct": -12.5, "turnover_chg": -17.0, "ratio": 25.0, "buy_chg": 4.5, "short_ratio": 34.5, "short_ratio_chg": -3.1, "judge": "逆張り買い"}, {"code": "3550", "sector": "金属製品", "short": "金属", "chg_pct": -5.7, "turnover_chg": -8.6, "ratio": 11.1, "buy_chg": 1.8, "short_ratio": 30.4, "short_ratio_chg": -6.5, "judge": "逆張り買い"}, {"code": "3600", "sector": "機械", "short": "機械", "chg_pct": -2.6, "turnover_chg": 1.2, "ratio": 9.2, "buy_chg": -2.8, "short_ratio": 42.6, "short_ratio_chg": -2.0, "judge": "整理進行"}, {"code": "3650", "sector": "電気機器", "short": "電機", "chg_pct": -6.8, "turnover_chg": 15.5, "ratio": 9.2, "buy_chg": 1.3, "short_ratio": 33.0, "short_ratio_chg": -6.8, "judge": "逆張り買い"}, {"code": "3700", "sector": "輸送用機器", "short": "輸送", "chg_pct": 4.5, "turnover_chg": 12.3, "ratio": 15.3, "buy_chg": -6.4, "short_ratio": 45.4, "short_ratio_chg": -1.6, "judge": ""}, {"code": "3750", "sector": "精密機器", "short": "精密", "chg_pct": -0.8, "turnover_chg": 9.2, "ratio": 16.6, "buy_chg": -2.2, "short_ratio": 40.2, "short_ratio_chg": 1.6, "judge": "売り仕掛け"}, {"code": "3800", "sector": "その他製品", "short": "他製品", "chg_pct": 3.5, "turnover_chg": 10.6, "ratio": 11.3, "buy_chg": -5.6, "short_ratio": 39.7, "short_ratio_chg": -1.8, "judge": ""}, {"code": "4050", "sector": "電気・ガス業", "short": "電ガス", "chg_pct": -1.0, "turnover_chg": -1.0, "ratio": 17.8, "buy_chg": 2.6, "short_ratio": 39.0, "short_ratio_chg": -3.2, "judge": "逆張り買い"}, {"code": "5050", "sector": "陸運業", "short": "陸運", "chg_pct": 2.0, "turnover_chg": -2.5, "ratio": 7.2, "buy_chg": 1.1, "short_ratio": 43.9, "short_ratio_chg": -4.4, "judge": ""}, {"code": "5100", "sector": "海運業", "short": "海運", "chg_pct": -0.2, "turnover_chg": 38.7, "ratio": 3.2, "buy_chg": -6.4, "short_ratio": 32.2, "short_ratio_chg": -3.4, "judge": "整理進行"}, {"code": "5150", "sector": "空運業", "short": "空運", "chg_pct": -2.2, "turnover_chg": 3.0, "ratio": 16.2, "buy_chg": 2.2, "short_ratio": 46.3, "short_ratio_chg": -2.5, "judge": "逆張り買い"}, {"code": "5200", "sector": "倉庫・運輸関連業", "short": "倉庫", "chg_pct": 2.1, "turnover_chg": 2.5, "ratio": 9.0, "buy_chg": -1.3, "short_ratio": 41.9, "short_ratio_chg": 3.5, "judge": ""}, {"code": "5250", "sector": "情報・通信業", "short": "情通", "chg_pct": -2.6, "turnover_chg": 0.3, "ratio": 9.1, "buy_chg": -1.7, "short_ratio": 34.7, "short_ratio_chg": -1.4, "judge": "整理進行"}, {"code": "6050", "sector": "卸売業", "short": "卸売", "chg_pct": 3.7, "turnover_chg": 15.6, "ratio": 7.8, "buy_chg": -5.7, "short_ratio": 45.6, "short_ratio_chg": 5.9, "judge": ""}, {"code": "6100", "sector": "小売業", "short": "小売", "chg_pct": 3.0, "turnover_chg": 19.7, "ratio": 5.5, "buy_chg": -3.6, "short_ratio": 45.3, "short_ratio_chg": -0.6, "judge": ""}, {"code": "7050", "sector": "銀行業", "short": "銀行", "chg_pct": -1.0, "turnover_chg": -4.0, "ratio": 10.9, "buy_chg": 1.0, "short_ratio": 43.8, "short_ratio_chg": 1.3, "judge": "逆張り買い"}, {"code": "7100", "sector": "証券・商品先物取引業", "short": "証券", "chg_pct": -0.5, "turnover_chg": 3.8, "ratio": 10.4, "buy_chg": -0.9, "short_ratio": 43.3, "short_ratio_chg": 6.3, "judge": "売り仕掛け"}, {"code": "7150", "sector": "保険業", "short": "保険", "chg_pct": 4.8, "turnover_chg": 2.9, "ratio": 11.7, "buy_chg": -12.2, "short_ratio": 37.8, "short_ratio_chg": 0.4, "judge": ""}, {"code": "7200", "sector": "その他金融業", "short": "他金融", "chg_pct": 0.7, "turnover_chg": 20.1, "ratio": 30.2, "buy_chg": -5.5, "short_ratio": 31.5, "short_ratio_chg": -6.3, "judge": ""}, {"code": "8050", "sector": "不動産業", "short": "不動産", "chg_pct": 3.6, "turnover_chg": -3.0, "ratio": 23.2, "buy_chg": 1.1, "short_ratio": 37.3, "short_ratio_chg": 2.5, "judge": ""}, {"code": "9050", "sector": "サービス業", "short": "サービス", "chg_pct": 3.9, "turnover_chg": 20.4, "ratio": 10.8, "buy_chg": -3.7, "short_ratio": 38.7, "short_ratio_chg": 3.1, "judge": ""}], "eval_states": [{"order": 1, "state": "クライマックス接近", "meaning": "海外が現物・先物とも売り越し、信用買い残が高水準のまま、評価損益率が-10%以下", "example": "海外 現物▲3,654／先物▲6,273、買い残6.66兆円、評価損益率-10.41%"}, {"order": 2, "state": "需給改善", "meaning": "海外が買い越しに転換、または信用買い残が大きく減少", "example": "海外 現物+2,000億円以上、買い残前週比-3%以下"}, {"order": 3, "state": "中立", "meaning": "海外・信用残ともに方向感なし", "example": "海外 ±1,000億円以内、買い残前週比±1%以内"}, {"order": 4, "state": "警戒", "meaning": "裁定買い残3兆円超、または信用買い残が増加しながら株価が上昇（高値掴みの蓄積）", "example": "裁定買い残3.2兆円、買い残前週比+3%、日経+3%"}], "report_text": [{"key": "week_label", "text": "2026年10月16日週（10/13〜10/16）・10/22公表"}, {"key": "summary", "text": "海外投資家は現物で買い越しから売り越しに転換・先物は売り越し、個人は買い越し（現金・信用とも）。総合評価は「クライマックス接近」"}, {"key": "eval_state", "text": "クライマックス接近"}, {"key": "eval_reason1", "text": "海外投資家が現物 ▲3,654億円・先物 ▲6,273億円 の同時売り越し"}, {"key": "eval_reason2", "text": "信用買い残（株数）は前週比 -2.51%（-3%まで減っていない）・評価損益率 -10.41%（-10%以下）。追証・投げ売りが出やすい水準【推測】"}, {"key": "futures_badge", "text": "海外投資家は現物・先物ともに売り越し → リスクオフの姿勢【推測】"}, {"key": "point1", "text": "海外投資家は現物・先物ともに売り越し｜現物 ▲3,654億円（前週 +14,318億円）・先物 ▲6,273億円（前週 ▲3,292億円）。現物は買い越しから売り越しに転換"}, {"key": "point2", "text": "個人は現金・信用ともに買い越し｜計 +2,193億円（前週 +881億円）。現金 +234億円・信用 +1,958億円"}, {"key": "point3", "text": "裁定買い残は高水準（2.5兆円以上）｜2.75兆円（前週比 +380億円）。売り残 576億円。先物主導の下落で解消売りが進むリスク【推測】"}, {"key": "point4", "text": "信用買い残 6.66兆円・評価損益率 -10.41%｜金額は前週比 ▲441億円、株数は前週比 -2.51%。信用倍率 9.99倍。評価損益率が-10%以下は追証・投げ売りが出やすい水準【推測】"}, {"key": "scn_up", "text": "海外投資家の売り一巡・買い戻し、信用買い残の大きな減少、米金利の安定が確認できれば需給改善へ【推測】"}, {"key": "scn_mid", "text": "海外の売りが一巡しても信用買い残の整理が進まず、方向感の乏しいレンジ推移【推測】"}, {"key": "scn_down", "text": "海外の売り継続と裁定解消が重なり、信用の投げ売りを誘発。評価損益率-15%以下で追証が連鎖【推測】"}, {"key": "src_spot", "text": "出所：JPX 投資部門別売買状況（二市場）・2026-10-22公表。個人の現金／信用は JPX の公表ファイルから手入力"}, {"key": "src_fut", "text": "出所：JPX 投資部門別取引状況（先物4商品の合算・手入力）"}, {"key": "src_arb", "text": "出所：JPX 裁定取引に係る現物ポジション（手入力）"}, {"key": "src_margin", "text": "出所：JPX 信用取引残高（週次・J-Quants の銘柄別を全銘柄で合計）。評価損益率は手入力"}, {"key": "src_ind", "text": "出所：Yahoo Finance（日経平均・ドル円・SOX・米10年債）、J-Quants（TOPIX）"}], "sector_text": [{"key": "data_updated", "text": "データ更新 2026-10-24 14:33"}, {"key": "read1", "text": "売買代金が増え、空売り比率が上がりながら下落した業種：精密機器、化学、証券・商品先物取引業。機関の売り仕掛け【推測】"}, {"key": "read2", "text": "下落中に信用買い残が増えた業種：非鉄金属、電気機器、金属製品（ほか3業種）。個人の逆張り【推測】。整理が進むまで上値は重い【推測】"}, {"key": "read3", "text": "上昇しながら空売り比率が下がった業種：その他金融業、陸運業、鉱業（ほか7業種）。資金の逃避先【推測】"}, {"key": "note", "text": "投資主体別×業種のデータは公開されていないため、株価・売買代金・信用残・空売り集計からの推計"}, {"key": "src", "text": "出所：J-Quants（33業種指数・日足・週次信用残・業種別空売り比率）"}]}
+</script>
+<div class="jr"><div class="wrap">
+<section id="report">
+  <header class="hd">
+    <h1>日本株 週次需給レポート</h1>
+    <div class="wk" data-source="report_text" data-field="text" data-where="key=week_label">—</div>
+    <div class="sum" data-source="report_text" data-field="text" data-where="key=summary">—</div>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button type="button" class="tab on" data-tab="all">全体需給</button>
+    <button type="button" class="tab" data-tab="sec">セクター別</button>
+    <div class="tabmeta"><span data-source="report_text" data-field="text" data-where="key=week_label">—</span><span data-source="sector_text" data-field="text" data-where="key=data_updated">—</span></div>
+  </nav>
+
+  <div class="g pane" id="pane-all">
+    <div class="kpis">
+      <div class="c kpi" id="k-spot" data-source="spot_flows">
+        <svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="var(--line2)" stroke-width="5"/><circle class="arc" cx="28" cy="28" r="24" fill="none" stroke="var(--blue)" stroke-width="5" stroke-linecap="round" transform="rotate(-90 28 28)"/></svg>
+        <div><div class="v" data-source="spot_flows" data-field="curr" data-where="investor=海外投資家">—</div><div class="l">海外投資家｜現物</div><div class="s">前週 <span data-source="spot_flows" data-field="prev" data-where="investor=海外投資家">—</span> 億円</div></div>
+      </div>
+      <div class="c kpi" id="k-fut" data-source="futures_flows">
+        <svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="var(--line2)" stroke-width="5"/><circle class="arc" cx="28" cy="28" r="24" fill="none" stroke="var(--blue)" stroke-width="5" stroke-linecap="round" transform="rotate(-90 28 28)"/></svg>
+        <div><div class="v" data-source="futures_flows" data-field="curr" data-where="investor=海外投資家">—</div><div class="l">海外投資家｜先物</div><div class="s">前週 <span data-source="futures_flows" data-field="prev" data-where="investor=海外投資家">—</span> 億円</div></div>
+      </div>
+      <div class="c kpi" id="k-arb" data-source="arbitrage">
+        <svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="var(--line2)" stroke-width="5"/><circle class="arc" cx="28" cy="28" r="24" fill="none" stroke="var(--blue)" stroke-width="5" stroke-linecap="round" transform="rotate(-90 28 28)"/><text class="pct" x="28" y="31.5" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)"></text></svg>
+        <div><div class="v" data-source="arbitrage" data-field="buy" data-where="latest=true">—</div><div class="l">裁定買い残（億円）</div><div class="s">警戒水準 3兆円に対する比率</div></div>
+      </div>
+      <div class="c kpi" id="k-pl" data-source="margin">
+        <svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="var(--line2)" stroke-width="5"/><circle class="arc" cx="28" cy="28" r="24" fill="none" stroke="var(--red)" stroke-width="5" stroke-linecap="round" transform="rotate(-90 28 28)"/></svg>
+        <div><div class="v" data-source="margin" data-field="pl_rate" data-where="latest=true">—</div><div class="l">信用評価損益率</div><div class="s">信用倍率 <span data-source="margin" data-field="ratio" data-where="latest=true">—</span> 倍</div></div>
+      </div>
+    </div>
+
+    <article class="c ev" id="b-eval">
+      <h2>総合評価</h2>
+      <div class="cb">
+        <div class="state" data-source="report_text" data-field="text" data-where="key=eval_state">—</div>
+        <div class="steps" id="eval-steps" data-source="eval_states report_text"></div>
+        <ul class="rs">
+          <li data-source="report_text" data-field="text" data-where="key=eval_reason1">—</li>
+          <li data-source="report_text" data-field="text" data-where="key=eval_reason2">—</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ① -->
+    <article class="c b1" id="b-spot">
+      <h2>① 投資主体別売買動向（現物）<small>億円｜細い棒＝前週、太い棒＝今週</small></h2>
+      <div class="cb">
+        <div class="flows" id="f-spot" data-source="spot_flows"></div>
+        <p class="src" data-source="report_text" data-field="text" data-where="key=src_spot">—</p>
+      </div>
+    </article>
+    <!-- ② -->
+    <article class="c b2" id="b-fut">
+      <h2>② 先物取引の売買動向<small>億円</small></h2>
+      <div class="cb">
+        <div class="flows" id="f-fut" data-source="futures_flows"></div>
+        <div class="badge" data-source="report_text" data-field="text" data-where="key=futures_badge">—</div>
+        <p class="src" data-source="report_text" data-field="text" data-where="key=src_fut">—</p>
+      </div>
+    </article>
+    <!-- ③ -->
+    <article class="c b3" id="b-arb">
+      <h2>③ 裁定取引残高の推移<small>億円・直近4週</small></h2>
+      <div class="cb">
+        <div class="ch" id="ch-arb" data-source="arbitrage"><div class="tip"></div></div>
+        <div class="memo"><span><i></i>2.5兆円＝高水準</span><span><i class="r"></i>3兆円＝警戒</span></div>
+        <table id="t-arb" data-source="arbitrage" data-row-key="week_end">
+          <thead><tr><th data-field="week_end">週末</th><th data-field="buy">買い残</th><th data-field="buy_chg">前週比</th><th data-field="sell">売り残</th><th data-field="sell_chg">前週比</th></tr></thead>
+          <tbody></tbody></table>
+        <p class="src" data-source="report_text" data-field="text" data-where="key=src_arb">—</p>
+      </div>
+    </article>
+    <!-- ④ -->
+    <article class="c b4" id="b-margin">
+      <h2>④ 信用取引残高の推移<small>金額：億円。棒＝買い残金額／線＝評価損益率（%）・直近4週</small></h2>
+      <div class="cb">
+        <div class="ch" id="ch-margin" data-source="margin"><div class="tip"></div></div>
+        <table id="t-margin" data-source="margin" data-row-key="week_end">
+          <thead><tr><th data-field="week_end">週末</th><th data-field="buy_amount">買い残 金額</th><th data-field="buy_chg">前週比</th><th data-field="sell_amount">売り残 金額</th><th data-field="sell_chg">前週比</th><th data-field="ratio">信用倍率</th><th data-field="pl_rate">評価損益率</th></tr></thead>
+          <tbody></tbody></table>
+        <p class="src" data-source="report_text" data-field="text" data-where="key=src_margin">—</p>
+      </div>
+    </article>
+    <!-- ⑤ -->
+    <article class="c b5" id="b-ind">
+      <h2>⑤ 主要指標の推移<small>今週末／前週末比</small></h2>
+      <div class="cb">
+        <div class="ind" id="ind" data-source="indicators"></div>
+        <p class="src" data-source="report_text" data-field="text" data-where="key=src_ind">—</p>
+      </div>
+    </article>
+    <!-- ⑥⑦ -->
+    <div class="b67">
+      <article class="c" id="b-points">
+        <h2>⑥ 今週の需給ポイント</h2>
+        <div class="cb"><ol class="pts">
+          <li data-source="report_text" data-field="text" data-where="key=point1">—</li>
+          <li data-source="report_text" data-field="text" data-where="key=point2">—</li>
+          <li data-source="report_text" data-field="text" data-where="key=point3">—</li>
+          <li data-source="report_text" data-field="text" data-where="key=point4">—</li>
+        </ol></div>
+      </article>
+      <article class="c" id="b-outlook">
+        <h2>⑦ 今後の見通し</h2>
+        <div class="cb scn">
+          <div><span class="lb u">上昇</span><p data-source="report_text" data-field="text" data-where="key=scn_up">—</p></div>
+          <div><span class="lb m">中立</span><p data-source="report_text" data-field="text" data-where="key=scn_mid">—</p></div>
+          <div><span class="lb d">下落</span><p data-source="report_text" data-field="text" data-where="key=scn_down">—</p></div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <div class="g pane" id="pane-sec" hidden>
+    <article class="c s1" id="b-in">
+      <h2>⑧-A 資金流入セクター 上位5<small>売買代金 前週比の降順</small></h2>
+      <div class="cb"><div class="tw"><table id="t-in" class="sec" data-source="sectors" data-row-key="sector"><thead></thead><tbody></tbody></table></div></div>
+    </article>
+    <article class="c s2" id="b-out">
+      <h2>⑧-B 資金流出セクター 下位5<small>週間騰落率の昇順</small></h2>
+      <div class="cb"><div class="tw"><table id="t-out" class="sec" data-source="sectors" data-row-key="sector"><thead></thead><tbody></tbody></table></div></div>
+    </article>
+    <article class="c s3" id="b-heat">
+      <h2>⑧-C 33業種ヒートマップ<small>行＝指標、列＝東証33業種（略称）。プラス＝緑、マイナス＝赤、ゼロ近辺＝白</small></h2>
+      <div class="cb"><div class="ch heat" id="ch-heat" data-source="sectors"><div class="tip"></div></div></div>
+    </article>
+    <article class="c ev s4" id="b-read" style="--st:var(--blue)">
+      <h2>⑧-D セクター需給の読み</h2>
+      <div class="cb">
+        <ul class="rs reads">
+          <li data-source="sector_text" data-field="text" data-where="key=read1">—</li>
+          <li data-source="sector_text" data-field="text" data-where="key=read2">—</li>
+          <li data-source="sector_text" data-field="text" data-where="key=read3">—</li>
+        </ul>
+        <div class="bdl"><span class="bd red">売り仕掛け</span><span class="bd green">踏み上げ余地</span><span class="bd green">整理進行</span><span class="bd gray">逆張り買い</span></div>
+      </div>
+    </article>
+    <p class="note s5"><span data-source="sector_text" data-field="text" data-where="key=note">—</span><br><span data-source="sector_text" data-field="text" data-where="key=src">—</span></p>
+  </div>
+</section>
+
+</div></div>
+
+<script>
+// ---- 埋め込みデータ（build_demand_report.py が <script id="demand-data"> を書き換える）----
+const DEMAND = JSON.parse(document.getElementById('demand-data').textContent);
+const dash = {
+  data: (id) => (id in DEMAND) ? {status:'ok', data: DEMAND[id]} : {status:'missing', data: []},
+  onData: (fn) => { fn(); let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(fn, 120); }); }
+};
+</script>
+<script>
+(function(){
+  const nf = (d) => new Intl.NumberFormat('ja-JP', {minimumFractionDigits:d, maximumFractionDigits:d});
+  const sgn = (v, d=0, plus=false) => {
+    if (v == null || v === '' || isNaN(+v)) return '—';
+    v = +v; const s = nf(d).format(Math.abs(v));
+    return v < 0 ? '▲' + s : (plus && v > 0 ? '+' + s : s);
+  };
+  const md = (s) => { const p = String(s).slice(0,10).split('-'); return (+p[1]) + '/' + (+p[2]); };
+  const STC = {'クライマックス接近':'var(--amber)','需給改善':'var(--green)','中立':'var(--gray)','警戒':'var(--red)'};
+  const ARB_HIGH = 25000, ARB_WARN = 30000; // 閾値（指定値）
+  const C = 2 * Math.PI * 24;
+
+  function failLine(el){ el.innerHTML=''; const d=document.createElement('div'); d.className='fail'; d.textContent='Failed to load'; el.appendChild(d); }
+  function placeholder(el){ el.innerHTML=''; const d=document.createElement('div'); d.className='fail'; d.style.cssText='color:var(--muted)'; d.textContent='—'; el.appendChild(d); el.querySelector('.fail').style.setProperty('--color-bad','transparent'); }
+  function stateOf(el, r){ if (r.status==='ok') return true; if (r.status==='error') failLine(el); else placeholder(el); return false; }
+  const el = (t, cls, txt) => { const e=document.createElement(t); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
+  const sorted = (rows) => { const a=[...rows]; if (a.length && a[0].order!=null) a.sort((x,y)=>x.order-y.order); return a; };
+
+  // ①② diverging bars
+  function drawFlows(id, ds){
+    const box = document.getElementById(id), r = dash.data(ds);
+    box.innerHTML = '';
+    if (!stateOf(box, r)) return;
+    const rows = sorted(r.data);
+    ['投資主体','前週 → 今週','今週','増減'].forEach((h,i)=>{ const d=el('div','hr',h); if(i>=2) d.style.textAlign='right'; box.appendChild(d); });
+    const max = d3.max(rows, d => Math.max(Math.abs(+d.prev), Math.abs(+d.curr))) || 1;
+    rows.forEach(d => {
+      const nm = el('div','nm');
+      if (d.investor==='個人 現金'){ nm.classList.add('sub'); nm.textContent='├ 個人 現金'; }
+      else if (d.investor==='個人 信用'){ nm.classList.add('sub'); nm.textContent='└ 個人 信用'; }
+      else nm.textContent = d.investor;
+      const bar = el('div','bar');
+      const svg = d3.select(bar).append('svg').attr('viewBox','0 0 200 16').attr('preserveAspectRatio','none');
+      const x = d3.scaleLinear([-max, max],[0,200]);
+      svg.append('line').attr('x1',x(0)).attr('x2',x(0)).attr('y1',0).attr('y2',16).attr('stroke','var(--line2)');
+      const p=+d.prev, c=+d.curr;
+      svg.append('rect').attr('x',Math.min(x(0),x(p))).attr('y',6).attr('width',Math.abs(x(p)-x(0))).attr('height',4).attr('fill','var(--gray)').attr('opacity',.55);
+      svg.append('rect').attr('x',Math.min(x(0),x(c))).attr('y',2).attr('width',Math.abs(x(c)-x(0))).attr('height',12).attr('rx',2).attr('fill', c<0?'var(--red)':'var(--blue)');
+      const cur = el('div','cur'+(c<0?' neg':''), sgn(c));
+      const dif = el('div','dif'); const chip = el('span', +d.diff>0?'up':+d.diff<0?'dn':'', sgn(d.diff,0,true)); dif.appendChild(chip);
+      box.append(nm, bar, cur, dif);
+      if (d.comment) box.appendChild(el('div','cm',d.comment));
+    });
+  }
+
+  // KPI rings
+  function ring(id, frac, color){
+    const k = document.getElementById(id), arc = k.querySelector('.arc');
+    const f = Math.max(0, Math.min(1, frac || 0));
+    arc.setAttribute('stroke-dasharray', `${C*f} ${C}`); if (f > 0) { if (color) arc.setAttribute('stroke', color); } else arc.setAttribute('stroke', 'transparent');
+  }
+  function drawKpis(){
+    const sp = dash.data('spot_flows'), fu = dash.data('futures_flows'), ar = dash.data('arbitrage'), mg = dash.data('margin');
+    ['k-spot','k-fut','k-arb','k-pl'].forEach(id => ring(id, 0));
+    const fmtEl = (sel, v, d=0, suf='') => { const e=document.querySelector(sel); e.textContent = sgn(v,d) + suf; e.classList.toggle('neg', +v<0); };
+    if (sp.status==='ok'){ const row = sp.data.find(d=>d.investor==='海外投資家'); const max = d3.max(sp.data, d=>Math.abs(+d.curr))||1;
+      fmtEl('#k-spot .v', row?.curr); document.querySelector('#k-spot .s span').textContent = sgn(row?.prev); ring('k-spot', Math.abs(+row?.curr)/max, +row?.curr<0?'var(--red)':'var(--blue)'); }
+    if (fu.status==='ok'){ const row = fu.data.find(d=>d.investor==='海外投資家'); const max = d3.max(fu.data, d=>Math.abs(+d.curr))||1;
+      fmtEl('#k-fut .v', row?.curr); document.querySelector('#k-fut .s span').textContent = sgn(row?.prev); ring('k-fut', Math.abs(+row?.curr)/max, +row?.curr<0?'var(--red)':'var(--blue)'); }
+    const latestOf = (rows) => rows.find(d => d.latest === true || String(d.latest) === 'true') || [...rows].sort((a,b)=>a.week_end<b.week_end?1:-1)[0];
+    if (ar.status==='ok'){ const last = latestOf(ar.data); const f = +last.buy/ARB_WARN;
+      fmtEl('#k-arb .v', last.buy); document.querySelector('#k-arb .pct').textContent = Math.round(f*100)+'%'; ring('k-arb', f, f>=1?'var(--red)':f>=ARB_HIGH/ARB_WARN?'var(--amber)':'var(--blue)'); }
+    if (mg.status==='ok'){ const last = latestOf(mg.data);
+      if (last.pl_rate!=null) fmtEl('#k-pl .v', last.pl_rate, 2, '%'); document.querySelector('#k-pl .s span').textContent = nf(2).format(+last.ratio); if (last.pl_rate!=null) ring('k-pl', Math.abs(+last.pl_rate)/20, +last.pl_rate<-15?'var(--amber)':'var(--red)'); else ring('k-pl', 0, 'transparent'); }
+  }
+
+  // ③ area chart
+  function drawArb(){
+    const box = document.getElementById('ch-arb'), r = dash.data('arbitrage');
+    const tip = box.querySelector('.tip'); box.querySelectorAll('svg').forEach(s=>s.remove());
+    if (r.status!=='ok'){ if (r.status==='error') { const f=el('div','fail','Failed to load'); f.style.minHeight='120px'; box.appendChild(f);} return; }
+    box.querySelectorAll('.fail').forEach(f=>f.remove());
+    const rows = [...r.data].sort((a,b)=>a.week_end<b.week_end?-1:1).map(d=>({...d, dt:new Date(d.week_end), buy:+d.buy, sell:+d.sell}));
+    const W = Math.max(200, box.clientWidth), H = 130, m = {t:10,r:14,b:20,l:8};
+    const svg = d3.select(box).insert('svg','.tip').attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%');
+    const x = d3.scalePoint(rows.map(d=>d.week_end), [m.l+20, W-m.r-20]);
+    const lo = Math.min(d3.min(rows,d=>d.buy), ARB_HIGH)*0.97, hi = Math.max(d3.max(rows,d=>d.buy), ARB_WARN)*1.02;
+    const y = d3.scaleLinear([lo,hi],[H-m.b, m.t]);
+    const gid = 'g'+Math.random().toString(36).slice(2,7);
+    const grad = svg.append('defs').append('linearGradient').attr('id',gid).attr('x1',0).attr('x2',0).attr('y1',0).attr('y2',1);
+    [[0,.35],[.5,.12],[1,0]].forEach(([o,a])=>grad.append('stop').attr('offset',o).attr('style',`stop-color:var(--blue);stop-opacity:${a}`));
+    [[ARB_HIGH,'var(--amber)'],[ARB_WARN,'var(--red)']].forEach(([v,c])=>{
+      svg.append('line').attr('x1',m.l).attr('x2',W-m.r).attr('y1',y(v)).attr('y2',y(v)).attr('stroke',c).attr('stroke-dasharray','3 3').attr('opacity',.8);
+      svg.append('text').attr('x',W-m.r).attr('y',y(v)-3).attr('text-anchor','end').attr('style',`fill:${c}`).text(nf(0).format(v));
+    });
+    svg.append('path').datum(rows).attr('fill',`url(#${gid})`).attr('d', d3.area().x(d=>x(d.week_end)).y0(H-m.b).y1(d=>y(d.buy)).curve(d3.curveMonotoneX));
+    svg.append('path').datum(rows).attr('fill','none').attr('stroke','var(--blue)').attr('stroke-width',2.5).attr('stroke-linecap','round').attr('d', d3.line().x(d=>x(d.week_end)).y(d=>y(d.buy)).curve(d3.curveMonotoneX));
+    svg.selectAll('.pt').data(rows).join('circle').attr('cx',d=>x(d.week_end)).attr('cy',d=>y(d.buy)).attr('r',4).attr('fill','var(--panel)').attr('stroke','var(--blue)').attr('stroke-width',2);
+    svg.selectAll('.vl').data(rows).join('text').attr('class','lbl').attr('x',d=>x(d.week_end)).attr('y',d=>y(d.buy)-9).attr('text-anchor','middle').text(d=>nf(0).format(d.buy));
+    svg.selectAll('.xl').data(rows).join('text').attr('x',d=>x(d.week_end)).attr('y',H-6).attr('text-anchor','middle').text(d=>md(d.week_end));
+    svg.selectAll('.hit').data(rows).join('rect').attr('x',d=>x(d.week_end)-x.step()/2).attr('y',0).attr('width',x.step()).attr('height',H).attr('fill','transparent')
+      .on('mousemove',(e,d)=>{ tip.style.display='block'; tip.textContent=`${md(d.week_end)}  買い残 ${nf(0).format(d.buy)}（${sgn(d.buy_chg,0,true)}）／売り残 ${nf(0).format(d.sell)}`; const b=box.getBoundingClientRect(); tip.style.left=Math.min(e.clientX-b.left+10, b.width-tip.offsetWidth-4)+'px'; tip.style.top=(e.clientY-b.top-28)+'px'; })
+      .on('mouseleave',()=>tip.style.display='none');
+  }
+
+  // ④ bars + line
+  function drawMargin(){
+    const box = document.getElementById('ch-margin'), r = dash.data('margin');
+    const tip = box.querySelector('.tip'); box.querySelectorAll('svg').forEach(s=>s.remove());
+    if (r.status!=='ok'){ if (r.status==='error'){ const f=el('div','fail','Failed to load'); f.style.minHeight='130px'; box.appendChild(f);} return; }
+    box.querySelectorAll('.fail').forEach(f=>f.remove());
+    const rows = [...r.data].sort((a,b)=>a.week_end<b.week_end?-1:1).map(d=>({...d, amt:+d.buy_amount, pl:d.pl_rate==null?null:+d.pl_rate}));
+    const W = Math.max(200, box.clientWidth), H = 140, m = {t:16,r:56,b:20,l:8};
+    const svg = d3.select(box).insert('svg','.tip').attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%');
+    const x = d3.scaleBand(rows.map(d=>d.week_end), [m.l, W-m.r]).padding(.45);
+    const y = d3.scaleLinear([d3.min(rows,d=>d.amt)*0.97, d3.max(rows,d=>d.amt)*1.03],[H-m.b, m.t]);
+    const y2 = d3.scaleLinear([d3.min(rows,d=>d.pl)-1, d3.max(rows,d=>d.pl)+1],[H-m.b, m.t]);
+    svg.selectAll('.g').data(y.ticks(3)).join('line').attr('x1',m.l).attr('x2',W-m.r).attr('y1',d=>y(d)).attr('y2',d=>y(d)).attr('stroke','var(--line)');
+    svg.selectAll('.b').data(rows).join('rect').attr('x',d=>x(d.week_end)).attr('y',d=>y(d.amt)).attr('width',x.bandwidth()).attr('height',d=>H-m.b-y(d.amt)).attr('rx',3)
+      .attr('fill',(d,i)=> i===rows.length-1 ? 'var(--blue)' : 'var(--line2)');
+    svg.selectAll('.bl').data(rows).join('text').attr('class','lbl').attr('x',d=>x(d.week_end)+x.bandwidth()/2).attr('y',d=>y(d.amt)-5).attr('text-anchor','middle').text(d=>nf(0).format(d.amt));
+    svg.append('path').datum(rows).attr('fill','none').attr('stroke','var(--red)').attr('stroke-width',2).attr('stroke-linecap','round').attr('stroke-linejoin','round')
+      .attr('d', d3.line().defined(d=>d.pl!=null).x(d=>x(d.week_end)+x.bandwidth()/2).y(d=>y2(d.pl)));
+    svg.selectAll('.pp').data(rows.filter(d=>d.pl!=null)).join('circle').attr('cx',d=>x(d.week_end)+x.bandwidth()/2).attr('cy',d=>y2(d.pl)).attr('r',3.5).attr('fill','var(--red)');
+    const last = rows[rows.length-1];
+    if (last.pl!=null) svg.append('text').attr('x',W-2).attr('y',y2(last.pl)+3).attr('text-anchor','end').attr('style','fill:var(--red);font-weight:600').text(sgn(last.pl,2)+'%');
+    svg.selectAll('.xl').data(rows).join('text').attr('x',d=>x(d.week_end)+x.bandwidth()/2).attr('y',H-6).attr('text-anchor','middle').text(d=>md(d.week_end));
+    svg.selectAll('.hit').data(rows).join('rect').attr('x',d=>x(d.week_end)-x.step()*x.padding()/2).attr('y',0).attr('width',x.step()).attr('height',H).attr('fill','transparent')
+      .on('mousemove',(e,d)=>{ tip.style.display='block'; tip.textContent=`${md(d.week_end)}  買い残 ${nf(0).format(d.amt)}億円（${sgn(d.buy_chg,0,true)}）／評価損益率 ${sgn(d.pl,2)}%／信用倍率 ${nf(2).format(+d.ratio)}倍`; const b=box.getBoundingClientRect(); tip.style.left=Math.min(e.clientX-b.left+10, b.width-tip.offsetWidth-4)+'px'; tip.style.top=(e.clientY-b.top-28)+'px'; })
+      .on('mouseleave',()=>tip.style.display='none');
+  }
+
+  // tables
+  function fillTable(id, ds, cols){
+    const tbl = document.getElementById(id), tb = tbl.querySelector('tbody'), r = dash.data(ds);
+    tb.innerHTML = '';
+    if (r.status !== 'ok') { const td = tb.insertRow().insertCell(); td.colSpan = cols.length; if (r.status==='error') failLine(td); else td.textContent='—'; return; }
+    const rows = [...r.data].sort((a,b)=>a.week_end<b.week_end?-1:1);
+    rows.forEach((row,i) => { const tr = tb.insertRow(); tr.dataset.key = row[cols[0].f]; if (i===rows.length-1) tr.className='hl';
+      cols.forEach(c => { const td = tr.insertCell(); c.draw(td, row[c.f], row); }); });
+  }
+  const dateCell = (td,v)=>{ td.className='k'; td.textContent=md(v); };
+  const numCell = (d=0, plus=false) => (td, v) => { td.className = (+v < 0 ? 'neg' : ''); td.textContent = sgn(v, d, plus); };
+
+  // ⑤ indicators
+  function drawInd(){
+    const box = document.getElementById('ind'), r = dash.data('indicators'); box.innerHTML='';
+    if (!stateOf(box, r)) return;
+    sorted(r.data).forEach(d=>{
+      const row = el('div'); const dec = d.decimals ?? 2, pt = d.chg_unit==='pt';
+      const v = el('div','v', nf(dec).format(+d.curr) + (pt?'%':'')); const sm = el('small', null, '前週末 ' + nf(dec).format(+d.prev) + (pt?'%':'')); v.appendChild(sm);
+      const c = +d.chg; const chip = el('div','d '+(c<0?'dn':c>0?'up':''), sgn(c,2,true) + (pt?'pt':'%'));
+      row.append(el('div','n',d.name), v, chip); box.appendChild(row);
+    });
+  }
+
+  // tabs
+  document.querySelectorAll('#tabs .tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#tabs .tab').forEach(x => x.classList.toggle('on', x === b));
+    document.getElementById('pane-all').hidden = b.dataset.tab !== 'all';
+    document.getElementById('pane-sec').hidden = b.dataset.tab !== 'sec';
+    drawHeat();
+  }));
+
+  // ⑧ sectors
+  const JUDGE_COLOR = {'売り仕掛け':'red','踏み上げ余地':'green','整理進行':'green','逆張り買い':'gray'};
+  const SEC_COLS = [
+    {f:'sector', h:'業種', draw:(td,v)=>{ td.className='k'; td.textContent=v; }},
+    {f:'chg_pct', h:'週間騰落率', draw:(td,v)=>{ td.className=+v<0?'neg':'pos'; td.textContent=sgn(v,1,true)+'%'; }},
+    {f:'turnover_chg', h:'売買代金 前週比', draw:(td,v)=>{ td.className=+v<0?'neg':''; td.textContent=sgn(v,1,true)+'%'; }},
+    {f:'ratio', h:'信用倍率', draw:(td,v)=>{ td.textContent=nf(1).format(+v)+'倍'; }},
+    {f:'buy_chg', h:'買い残 前週比', draw:(td,v)=>{ td.className=+v<0?'neg':''; td.textContent=sgn(v,1,true)+'%'; }},
+    {f:'short_ratio', h:'空売り比率', draw:(td,v,row)=>{ td.textContent=nf(1).format(+v)+'%'; const s=el('small',null,' ('+sgn(row.short_ratio_chg,1,true)+')'); s.style.color=+row.short_ratio_chg>0?'var(--red)':'var(--muted)'; td.appendChild(s); }},
+    {f:'judge', h:'判定', draw:(td,v)=>{ td.innerHTML=''; const t=(v??'').toString().trim(); if (t) td.appendChild(el('span','bd '+(JUDGE_COLOR[t]||'gray'),t)); }},
+  ];
+  function fillSecTable(id, pick){
+    const tbl = document.getElementById(id), th = tbl.querySelector('thead'), tb = tbl.querySelector('tbody'), r = dash.data('sectors');
+    th.innerHTML=''; const hr = th.insertRow(); SEC_COLS.forEach(c=>{ const t=document.createElement('th'); if(c.f) t.setAttribute('data-field',c.f); t.textContent=c.h; hr.appendChild(t); });
+    tb.innerHTML='';
+    if (r.status!=='ok'){ const td=tb.insertRow().insertCell(); td.colSpan=SEC_COLS.length; if(r.status==='error') failLine(td); else td.textContent='—'; return; }
+    pick([...r.data]).forEach(row=>{ const tr=tb.insertRow(); tr.dataset.key=row.sector; SEC_COLS.forEach(c=>{ const td=tr.insertCell(); c.draw(td, c.f?row[c.f]:null, row); }); });
+  }
+  function drawHeat(){
+    const box = document.getElementById('ch-heat');
+    const r = dash.data('sectors'), tip = box.querySelector('.tip'); box.querySelectorAll('svg,.fail').forEach(s=>s.remove());
+    if (r.status!=='ok'){ if(r.status==='error'){ const f=el('div','fail','Failed to load'); f.style.minHeight='160px'; box.appendChild(f);} return; }
+    const rows = [...r.data].sort((a,b)=>+a.code-+b.code);
+    const med = d3.median(rows, d=>+d.short_ratio);
+    const metrics = [
+      {k:'chg_pct', l:'週間騰落率', v:d=>+d.chg_pct, f:v=>sgn(v,hd,true), inv:false},
+      {k:'turnover_chg', l:'売買代金前週比', v:d=>+d.turnover_chg, f:v=>sgn(v,hd,true), inv:false},
+      {k:'buy_chg', l:'買い残前週比', v:d=>+d.buy_chg, f:v=>sgn(v,hd,true), inv:false},
+      {k:'short_ratio', l:'空売り比率', v:d=>+d.short_ratio-med, f:(v,d)=>nf(hd).format(+d.short_ratio), inv:true},
+    ];
+    const wrapW = document.querySelector('.jr .wrap').clientWidth;
+    const W = Math.max(400, box.clientWidth || (wrapW >= 1100 ? wrapW*9/12 - 9 - 28 : wrapW - 28)), L = 86, R = 130, cw = (W-L-R)/rows.length, hd = cw < 36 ? 0 : 1, ch = 30, top = 4, labH = 30, H = top + metrics.length*ch + labH;
+    const svg = d3.select(box).insert('svg','.tip').attr('viewBox',`0 0 ${W} ${H}`).attr('width','100%');
+    const col = (t) => { // t in [-1,1]
+      const a = Math.min(1, Math.abs(t));
+      return a < .06 ? '#E8EDF5' : d3.interpolateRgb('#E8EDF5', t<0 ? '#E0344C' : '#1FA873')(Math.pow(a,.8));
+    };
+    metrics.forEach((m,i)=>{
+      const max = d3.max(rows, d=>Math.abs(m.v(d))) || 1;
+      svg.append('text').attr('class','rl').attr('x',L-8).attr('y',top+i*ch+ch/2+3.5).attr('text-anchor','end').text(m.l);
+      rows.forEach((d,j)=>{
+        let t = m.v(d)/max; if (m.inv) t = -t;
+        const g = svg.append('g').attr('transform',`translate(${L+j*cw},${top+i*ch})`);
+        g.append('rect').attr('width',cw-1.5).attr('height',ch-1.5).attr('rx',2).attr('fill',col(t));
+        g.append('text').attr('class','cv').attr('x',(cw-1.5)/2).attr('y',ch/2+2.5).attr('text-anchor','middle').attr('style',`fill:${Math.abs(t)<.45?'#1A2030':'#fff'}`).text(m.f(m.v(d),d));
+        g.append('rect').attr('width',cw).attr('height',ch).attr('fill','transparent')
+          .on('mousemove',(e)=>{ tip.style.display='block'; tip.textContent=`${d.sector}｜${m.l} ${m.k==='short_ratio'?nf(1).format(+d.short_ratio)+'%（中央値比 '+sgn(+d.short_ratio-med,1,true)+'pt）':sgn(m.v(d),1,true)+'%'}`; const b=box.getBoundingClientRect(); tip.style.left=Math.min(e.clientX-b.left+10, b.width-tip.offsetWidth-4)+'px'; tip.style.top=(e.clientY-b.top-28)+'px'; })
+          .on('mouseleave',()=>tip.style.display='none');
+      });
+    });
+    rows.forEach((d,j)=>{
+      const s = String(d.short), half = Math.ceil(s.length/2), lines = s.length>3 ? [s.slice(0,half), s.slice(half)] : [s];
+      const tx = svg.append('text').attr('x',L+j*cw+(cw-1.5)/2).attr('y',top+metrics.length*ch+10).attr('text-anchor','middle');
+      lines.forEach((ln,k)=>tx.append('tspan').attr('x',L+j*cw+(cw-1.5)/2).attr('dy',k?10:0).text(ln));
+    });
+    // legend
+    const gid='h'+Math.random().toString(36).slice(2,7), lg = svg.append('defs').append('linearGradient').attr('id',gid).attr('x1',0).attr('x2',0).attr('y1',0).attr('y2',1);
+    [[0,1],[.5,0],[1,-1]].forEach(([o,t])=>lg.append('stop').attr('offset',o).attr('stop-color',col(t)));
+    const lx = W-R+14, ly = top+4, lh = metrics.length*ch-8;
+    svg.append('rect').attr('x',lx).attr('y',ly).attr('width',10).attr('height',lh).attr('rx',2).attr('fill',`url(#${gid})`);
+    [['プラス',ly+8],['0',ly+lh/2+3],['マイナス',ly+lh]].forEach(([t,y])=>svg.append('text').attr('x',lx+14).attr('y',y).text(t));
+    svg.append('text').attr('x',lx-2).attr('y',H-2).attr('text-anchor','start').text('行ごとに最大絶対値で正規化');
+  }
+
+  function fillTexts(){
+    const r = dash.data('report_text'); const map = {}; if (r.status==='ok') r.data.forEach(x=>map[x.key]=x.text);
+    const r2 = dash.data('sector_text'); const map2 = {}; if (r2.status==='ok') r2.data.forEach(x=>map2[x.key]=x.text);
+    document.querySelectorAll('.jr [data-source="sector_text"][data-where]').forEach(e => {
+      const k = e.getAttribute('data-where').replace('key=','');
+      if (r2.status==='error'){ if(!e.querySelector('.fail')) failLine(e); return; }
+      e.textContent = map2[k] ?? '—';
+    });
+    document.querySelectorAll('.jr [data-source="report_text"][data-where]').forEach(e => {
+      const k = e.getAttribute('data-where').replace('key=','');
+      if (r.status==='error'){ if(!e.querySelector('.fail')) failLine(e); return; }
+      const t = map[k]; if (t==null){ e.textContent='—'; return; }
+      if (e.tagName==='LI' && e.closest('.pts') && t.includes('｜')){ const i=t.indexOf('｜'); e.textContent=''; e.append(el('b',null,t.slice(0,i)), el('span',null,t.slice(i))); }
+      else e.textContent = t;
+    });
+    return map;
+  }
+
+  function evalCard(target, st, allStates, extra){
+    const c = target; c.style.setProperty('--st', STC[st] || 'var(--gray)');
+    const steps = c.querySelector('.steps'); steps.innerHTML='';
+    allStates.forEach(s=>{ const sp=el('span',s.state===st?'on':'',s.state); sp.style.setProperty('--sc',STC[s.state]||'var(--gray)'); steps.appendChild(sp); });
+  }
+  function drawEval(map){
+    const es = dash.data('eval_states'); const states = es.status==='ok' ? [...es.data].sort((a,b)=>a.order-b.order) : [];
+    const card = document.getElementById('b-eval');
+    if (es.status==='error') failLine(card.querySelector('.steps')); else evalCard(card, map.eval_state, states);
+  }
+
+  dash.onData(() => {
+    drawKpis();
+    drawFlows('f-spot','spot_flows'); drawFlows('f-fut','futures_flows');
+    drawArb(); drawMargin();
+    fillTable('t-arb','arbitrage',[{f:'week_end',draw:dateCell},{f:'buy',draw:numCell()},{f:'buy_chg',draw:numCell(0,true)},{f:'sell',draw:numCell()},{f:'sell_chg',draw:numCell(0,true)}]);
+    fillTable('t-margin','margin',[{f:'week_end',draw:dateCell},{f:'buy_amount',draw:numCell()},{f:'buy_chg',draw:numCell(0,true)},
+      {f:'sell_amount',draw:numCell()},{f:'sell_chg',draw:numCell(0,true)},
+      {f:'ratio',draw:(td,v)=>{ td.textContent=nf(2).format(+v)+'倍'; }},{f:'pl_rate',draw:(td,v)=>{ td.className=+v<0?'neg':''; td.textContent=sgn(v,2)+'%'; }}]);
+    drawInd();
+    fillSecTable('t-in', rows => rows.sort((a,b)=>+b.turnover_chg-+a.turnover_chg).slice(0,5));
+    fillSecTable('t-out', rows => rows.sort((a,b)=>+a.chg_pct-+b.chg_pct).slice(0,5));
+    drawHeat();
+    drawEval(fillTexts());
+  });
+})();
+</script>
+</div>
+</body>
+</html>
